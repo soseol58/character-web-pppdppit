@@ -34,6 +34,7 @@ export default function CharacterMap() {
   const adjustForBg=(hex)=>{if(isDark||!hex||hex==="BW")return hex;const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);const lum=(0.299*r+0.587*g+0.114*b)/255;if(lum<0.55)return hex;const f=0.45/lum;return `#${Math.round(r*f).toString(16).padStart(2,"0")}${Math.round(g*f).toString(16).padStart(2,"0")}${Math.round(b*f).toString(16).padStart(2,"0")}`;};
   const resolveColor = c => {const v = c === "BW" ? BW_COLOR : c; return adjustForBg(v);};
   const [characters,setCharacters]=useState(DEFAULT_CHARACTERS);const [relations,setRelations]=useState(DEFAULT_RELATIONS);
+  const [groups,setGroups]=useState([]);const [showGroupModal,setShowGroupModal]=useState(null);const [groupName,setGroupName]=useState("");const [groupColor,setGroupColor]=useState(COLORS[4]);const [groupMembers,setGroupMembers]=useState([]);
     const [dragging,setDragging]=useState(null);const [dragOffset,setDragOffset]=useState({x:0,y:0});
   const [selectedChar,setSelectedChar]=useState(null);const [connectingFrom,setConnectingFrom]=useState(null);
   const [showAddModal,setShowAddModal]=useState(false);const [showRelModal,setShowRelModal]=useState(null);const [showEditModal,setShowEditModal]=useState(null);
@@ -48,8 +49,8 @@ export default function CharacterMap() {
   const [canvasSize]=useState({width:2000,height:1500});
 
   // JSON Export/Import (zero traffic - pure client-side)
-  const exportJson=()=>{const data={projectTitle,projectLogo,themeId,characters,relations};const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`${projectTitle||"character-map"}-${new Date().toISOString().slice(0,10)}.json`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);};
-  const importJson=(file)=>{if(!file)return;const reader=new FileReader();reader.onload=e=>{try{const data=JSON.parse(e.target.result);if(data.characters)setCharacters(data.characters);if(data.relations)setRelations(data.relations);if(data.projectTitle!==undefined)setProjectTitle(data.projectTitle);if(data.projectLogo!==undefined)setProjectLogo(data.projectLogo);if(data.themeId)setThemeId(data.themeId);setSelectedChar(null);}catch(err){alert("파일을 읽을 수 없습니다.");}};reader.readAsText(file);};
+  const exportJson=()=>{const data={projectTitle,projectLogo,themeId,characters,relations,groups};const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`${projectTitle||"character-map"}-${new Date().toISOString().slice(0,10)}.json`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);};
+  const importJson=(file)=>{if(!file)return;const reader=new FileReader();reader.onload=e=>{try{const data=JSON.parse(e.target.result);if(data.characters)setCharacters(data.characters);if(data.relations)setRelations(data.relations);if(data.groups)setGroups(data.groups);if(data.projectTitle!==undefined)setProjectTitle(data.projectTitle);if(data.projectLogo!==undefined)setProjectLogo(data.projectLogo);if(data.themeId)setThemeId(data.themeId);setSelectedChar(null);}catch(err){alert("파일을 읽을 수 없습니다.");}};reader.readAsText(file);};
   const [newName,setNewName]=useState("");const [newDesc,setNewDesc]=useState("");const [newColor,setNewColor]=useState(COLORS[0]);const [newAvatar,setNewAvatar]=useState(null);const [newSize,setNewSize]=useState(2);
   const [editName,setEditName]=useState("");const [editDesc,setEditDesc]=useState("");const [editColor,setEditColor]=useState("");const [editAvatar,setEditAvatar]=useState(null);const [editSize,setEditSize]=useState(2);
   const [relType,setRelType]=useState("friend");const [relLabel,setRelLabel]=useState("");const [relCustomColor,setRelCustomColor]=useState(null);const [relLineStyle,setRelLineStyle]=useState("solid");
@@ -77,6 +78,16 @@ export default function CharacterMap() {
     return{tipX,tipY,p1x:baseX+px*6,p1y:baseY+py*6,p2x:baseX-px*6,p2y:baseY-py*6};
   };
 
+  // Group helpers - rounded rect around members with padding
+  const getGroupBounds=(g)=>{
+    const pts=g.members.map(mid=>characters.find(c=>c.id===mid)).filter(Boolean);
+    if(pts.length===0)return null;
+    let x1=Infinity,y1=Infinity,x2=-Infinity,y2=-Infinity;
+    pts.forEach(c=>{const s=SIZE_LEVELS[c.sizeLevel??2];x1=Math.min(x1,c.x-s.radius);y1=Math.min(y1,c.y-s.radius);x2=Math.max(x2,c.x+s.radius);y2=Math.max(y2,c.y+s.radius);});
+    const pad=28;return{x:x1-pad,y:y1-pad-(g.name?22:0),w:x2-x1+pad*2,h:y2-y1+pad*2+(g.name?22:0),labelY:y1-pad-(g.name?20:0)};
+  };
+  const openEditGroup=(g)=>{setGroupName(g.name);setGroupColor(g.color);setGroupMembers([...g.members]);setShowGroupModal(g.id);};
+
   // PNG Export
   const exportToPng=useCallback(async()=>{
     setIsExporting(true);setSelectedChar(null);await new Promise(r=>setTimeout(r,100));
@@ -95,6 +106,12 @@ export default function CharacterMap() {
       if(hasTitle){const cx=(minX+maxX)/2,ty=minY+65;
         if(projectLogo){await new Promise(resolve=>{const li=new Image();li.crossOrigin="anonymous";li.onload=()=>{const lh=96,lw=(li.naturalWidth/li.naturalHeight)*lh;ctx.save();ctx.font="900 36px 'Noto Sans KR',sans-serif";const tw=projectTitle?ctx.measureText(projectTitle).width:0;const totalW=lw+(projectTitle?8+tw:0);const sx=cx-totalW/2;ctx.drawImage(li,sx,ty-lh/2,lw,lh);if(projectTitle){ctx.fillStyle=T.labelTxt;ctx.textAlign="left";ctx.textBaseline="middle";ctx.fillText(projectTitle,sx+lw+8,ty);}ctx.restore();resolve();};li.onerror=()=>{if(projectTitle){ctx.save();ctx.fillStyle=T.labelTxt;ctx.font="900 36px 'Noto Sans KR',sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(projectTitle,cx,ty);ctx.restore();}resolve();};li.src=projectLogo;});}
         else if(projectTitle){ctx.save();ctx.fillStyle=T.labelTxt;ctx.font="900 36px 'Noto Sans KR',sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(projectTitle,cx,ty);ctx.restore();}}
+
+      // Groups (dashed rounded rect)
+      groups.forEach(g=>{const gb=getGroupBounds(g);if(!gb)return;
+        ctx.save();ctx.globalAlpha=0.12;ctx.fillStyle=g.color;ctx.beginPath();ctx.roundRect(gb.x,gb.y,gb.w,gb.h,20);ctx.fill();ctx.restore();
+        ctx.save();ctx.globalAlpha=0.35;ctx.strokeStyle=g.color;ctx.lineWidth=2;ctx.setLineDash([8,5]);ctx.beginPath();ctx.roundRect(gb.x,gb.y,gb.w,gb.h,20);ctx.stroke();ctx.setLineDash([]);ctx.restore();
+        if(g.name){ctx.save();ctx.globalAlpha=0.8;ctx.fillStyle=g.color;ctx.font="700 12px 'Noto Sans KR',sans-serif";ctx.textAlign="left";ctx.textBaseline="top";ctx.fillText(g.name,gb.x+14,gb.labelY+4);ctx.restore();}});
 
       // Relations
       relations.forEach(rel=>{const fc=characters.find(c=>c.id===rel.from),tc=characters.find(c=>c.id===rel.to);if(!fc||!tc)return;const color=getRelColor(rel),ls=rel.lineStyle||"solid";
@@ -121,7 +138,7 @@ export default function CharacterMap() {
       ctx.save();ctx.fillStyle=T.wm;ctx.font="500 12px 'Noto Sans KR',sans-serif";ctx.textAlign="right";ctx.fillText("인물관계도 메이커",maxX-16,maxY-16);ctx.restore();
       canvas.toBlob(blob=>{if(!blob){setIsExporting(false);return;}const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`${projectTitle||"character-map"}-${new Date().toISOString().slice(0,10)}.png`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);setIsExporting(false);},"image/png");
     }catch(e){console.error(e);setIsExporting(false);}
-  },[characters,relations,T,projectTitle,projectLogo]);
+  },[characters,relations,groups,T,projectTitle,projectLogo]);
 
   const handleMouseDown=useCallback((e,cid)=>{e.stopPropagation();if(connectingFrom){if(connectingFrom!==cid)setShowRelModal({from:connectingFrom,to:cid});setConnectingFrom(null);return;}const ch=characters.find(c=>c.id===cid);const p=getSvgPoint(e.clientX,e.clientY);setDragOffset({x:p.x-ch.x,y:p.y-ch.y});setDragging(cid);setSelectedChar(cid);},[characters,connectingFrom,getSvgPoint]);
   const handleMouseMove=useCallback(e=>{if(dragging){const p=getSvgPoint(e.clientX,e.clientY);setCharacters(pr=>pr.map(c=>c.id===dragging?{...c,x:p.x-dragOffset.x,y:p.y-dragOffset.y}:c));}else if(isPanning)setPan({x:e.clientX-panStart.x,y:e.clientY-panStart.y});},[dragging,dragOffset,getSvgPoint,isPanning,panStart]);
@@ -238,6 +255,12 @@ export default function CharacterMap() {
       </defs>
       <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
         <rect width={canvasSize.width} height={canvasSize.height} fill="url(#grid)"/>
+        {groups.map(g=>{const gb=getGroupBounds(g);if(!gb)return null;return(
+          <g key={g.id} onClick={e=>{e.stopPropagation();openEditGroup(g);}} style={{cursor:"pointer"}}>
+            <rect x={gb.x} y={gb.y} width={gb.w} height={gb.h} rx="20" fill={g.color} opacity="0.12"/>
+            <rect x={gb.x} y={gb.y} width={gb.w} height={gb.h} rx="20" fill="none" stroke={g.color} strokeWidth="2" strokeDasharray="8,5" opacity="0.35"/>
+            {g.name&&<text x={gb.x+14} y={gb.labelY+15} fill={g.color} fontSize="12" fontWeight="700" opacity="0.8">{g.name}</text>}
+          </g>);})}
         {relations.map(rel=>{const fc=characters.find(c=>c.id===rel.from),tc=characters.find(c=>c.id===rel.to);if(!fc||!tc)return null;const color=getRelColor(rel),ls=rel.lineStyle||"solid",pathD=getRelPathD(rel,fc,tc),mid=getRelMid(rel,fc,tc),lb=(rel.type==="custom"&&!rel.label)?"":rel.label||(RELATIONSHIP_TYPES[rel.type]?.label||"기타"),pw=Math.max(50,lb.length*14+16);
           let arrow=null,arrow2=null;if(ls==="arrowToFirst"||ls==="arrowToSecond"||ls==="arrowBoth"){arrow=getArrowPoints(fc,tc,ls==="arrowToSecond"||ls==="arrowBoth");if(ls==="arrowBoth")arrow2=getArrowPoints(fc,tc,false);if(ls==="arrowToFirst")arrow=getArrowPoints(fc,tc,false);}
           const rlGlow=isDark?"0.11":"0.11",rlLine=isDark?"0.53":"0.63",rlArrow=isDark?"0.53":"0.63";
@@ -257,6 +280,7 @@ export default function CharacterMap() {
         <button onClick={()=>{jsonInputRef.current?.click();}} style={{...btnS,padding:"10px 18px",fontSize:"13px",display:"flex",alignItems:"center",gap:"8px",boxShadow:T.pShadow,borderRadius:"14px"}}>📂 불러오기</button>
         <button onClick={()=>{if(selectedChar){setConnectingFrom(selectedChar);setShowFab(false);}}} style={{...btnS,padding:"10px 18px",fontSize:"13px",display:"flex",alignItems:"center",gap:"8px",boxShadow:T.pShadow,borderRadius:"14px",opacity:selectedChar?1:0.4}}>🔗 관계 연결</button>
         <button onClick={()=>{setShowAddModal(true);setShowFab(false);}} style={{...btnP,padding:"10px 18px",fontSize:"13px",display:"flex",alignItems:"center",gap:"8px",boxShadow:"0 8px 24px rgba(99,102,241,0.3)",borderRadius:"14px"}}>+ 인물 추가</button>
+        <button onClick={()=>{setGroupName("");setGroupColor(COLORS[4]);setGroupMembers([]);setShowGroupModal("new");setShowFab(false);}} style={{...btnP,padding:"10px 18px",fontSize:"13px",display:"flex",alignItems:"center",gap:"8px",boxShadow:"0 8px 24px rgba(99,102,241,0.3)",borderRadius:"14px",background:"linear-gradient(135deg,#F59E0B,#D97706)"}}>📦 그룹 추가</button>
       </>}
       <button onClick={()=>setShowFab(p=>!p)} style={{width:"56px",height:"56px",borderRadius:"50%",background:"linear-gradient(135deg,#6366F1,#8B5CF6)",border:"none",color:"#fff",fontSize:"24px",cursor:"pointer",boxShadow:"0 8px 24px rgba(99,102,241,0.4)",display:"flex",alignItems:"center",justifyContent:"center",transition:"transform 0.2s",transform:showFab?"rotate(45deg)":"rotate(0deg)"}}>+</button>
     </div>
@@ -334,6 +358,10 @@ export default function CharacterMap() {
           <div style={{fontWeight:"700",color:T.text,marginBottom:"6px",fontSize:"14px"}}>✏️ 편집 · 수정</div>
           <div>인물 또는 관계를 클릭해 해당 항목의 수정 또는 삭제가 가능합니다.<br/><span style={{color:"#EF4444",fontSize:"11px"}}>(삭제 되돌리기 불가)</span></div>
         </div>
+        <div style={{padding:"14px 16px",borderRadius:"14px",background:T.input}}>
+          <div style={{fontWeight:"700",color:T.text,marginBottom:"6px",fontSize:"14px"}}>📦 그룹</div>
+          <div><span style={{fontWeight:"600"}}>+ 버튼</span> → <span style={{fontWeight:"600"}}>그룹 추가</span>를 통해 인물을 묶을 수 있습니다.<br/>그룹 영역을 클릭하면 편집/삭제할 수 있습니다.</div>
+        </div>
 
         <div style={{padding:"14px 16px",borderRadius:"14px",background:T.input}}>
           <div style={{fontWeight:"700",color:T.text,marginBottom:"6px",fontSize:"14px"}}>🎨 테마 설정</div>
@@ -355,6 +383,21 @@ export default function CharacterMap() {
       </div>
       <div style={{display:"flex",justifyContent:"flex-end",marginTop:"24px"}}>
         <button onClick={()=>setShowInfo(false)} style={btnP}>확인</button>
+      </div>
+    </div></div>}
+    {showGroupModal&&<div style={modalStyle} onClick={()=>setShowGroupModal(null)}><div style={cardStyle} onClick={e=>e.stopPropagation()}>
+      <h3 style={{margin:"0 0 24px",color:T.text,fontSize:"18px",fontWeight:"600"}}>{showGroupModal==="new"?"📦 새 그룹":"📦 그룹 편집"}</h3>
+      <div style={{display:"flex",flexDirection:"column",gap:"16px"}}>
+        <div><label style={{fontSize:"12px",color:T.textSec,marginBottom:"6px",display:"block"}}>그룹 이름</label><input value={groupName} onChange={e=>setGroupName(e.target.value)} placeholder="예: 학생회, 길드..." style={inputStyle} autoFocus/></div>
+        <div><label style={{fontSize:"12px",color:T.textSec,marginBottom:"8px",display:"block"}}>색상</label><div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>{COLORS.map(c=><div key={c} onClick={()=>setGroupColor(c)} style={{width:"28px",height:"28px",borderRadius:"50%",background:c,cursor:"pointer",border:groupColor===c?"3px solid #6366F1":"3px solid transparent"}}/>)}</div></div>
+        <div><label style={{fontSize:"12px",color:T.textSec,marginBottom:"8px",display:"block"}}>멤버</label><div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>{characters.map(c=><button key={c.id} onClick={()=>setGroupMembers(p=>p.includes(c.id)?p.filter(x=>x!==c.id):[...p,c.id])} style={{padding:"7px 14px",borderRadius:"20px",border:`2px solid ${groupMembers.includes(c.id)?c.color:T.btnSecBd}`,background:groupMembers.includes(c.id)?`${c.color}20`:T.btnSec,color:groupMembers.includes(c.id)?c.color:T.btnSecC,cursor:"pointer",fontSize:"13px",fontFamily:"'Noto Sans KR',sans-serif",transition:"all 0.15s"}}>{groupMembers.includes(c.id)?"✓ ":""}{c.name}</button>)}</div></div>
+        <div style={{display:"flex",gap:"8px",justifyContent:"flex-end",marginTop:"8px"}}>
+          {showGroupModal!=="new"&&<button onClick={()=>{setGroups(p=>p.filter(g=>g.id!==showGroupModal));setShowGroupModal(null);}} style={{...btnS,color:"#FF6B6B",borderColor:"rgba(255,80,80,0.3)",marginRight:"auto"}}>삭제</button>}
+          <button onClick={()=>setShowGroupModal(null)} style={btnS}>취소</button>
+          <button onClick={()=>{if(groupMembers.length===0)return;if(showGroupModal==="new"){setGroups(p=>[...p,{id:generateId(),name:groupName,color:groupColor,members:groupMembers}]);}else{setGroups(p=>p.map(g=>g.id===showGroupModal?{...g,name:groupName,color:groupColor,members:groupMembers}:g));}setShowGroupModal(null);}} style={{...btnP,opacity:groupMembers.length?1:0.4}}>
+            {showGroupModal==="new"?"추가":"저장"}
+          </button>
+        </div>
       </div>
     </div></div>}
     {/* Confirm Modal */}
