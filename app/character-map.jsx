@@ -24,7 +24,7 @@ const getZigzagPathD=(fX,fY,tX,tY)=>{const dx=tX-fX,dy=tY-fY,dist=Math.sqrt(dx*d
 const getCurvedPathD=(fX,fY,tX,tY)=>{const dx=tX-fX,dy=tY-fY;return`M ${fX} ${fY} Q ${(fX+tX)/2-dy*0.15} ${(fY+tY)/2+dx*0.15} ${tX} ${tY}`;};
 const getMidOfCurve=(fX,fY,tX,tY)=>{const dx=tX-fX,dy=tY-fY;return{x:(fX+tX)/2-dy*0.075,y:(fY+tY)/2+dx*0.075};};
 
-const DEFAULT_CHARACTERS = [{id:"1",name:"주인공",x:400,y:300,color:"#1359BE",avatar:null,description:"이야기의 중심 인물",sizeLevel:2},{id:"2",name:"히로인",x:650,y:250,color:"#EB7292",avatar:null,description:"주인공의 동반자",sizeLevel:2},{id:"3",name:"악역",x:400,y:550,color:"#EF4444",avatar:null,description:"이야기의 갈등 요소",sizeLevel:2}];
+const DEFAULT_CHARACTERS = [{id:"1",name:"주인공",x:400,y:300,color:"#1359BE",avatar:null,description:"이야기의 중심 인물",sizeLevel:2},{id:"2",name:"연인",x:650,y:250,color:"#E68200",avatar:null,description:"주인공의 동반자",sizeLevel:2},{id:"3",name:"악역",x:400,y:550,color:"#EF4444",avatar:null,description:"이야기의 갈등 요소",sizeLevel:2}];
 const DEFAULT_RELATIONS = [{id:"r1",from:"1",to:"2",type:"lover",label:"",customColor:null,lineStyle:"solid"},{id:"r2",from:"1",to:"3",type:"enemy",label:"",customColor:null,lineStyle:"solid"}];
 
 export default function CharacterMap() {
