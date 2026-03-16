@@ -44,13 +44,16 @@ export default function CharacterMap() {
   const [zoom,setZoom]=useState(1);const [pan,setPan]=useState({x:0,y:0});const [isPanning,setIsPanning]=useState(false);const [panStart,setPanStart]=useState({x:0,y:0});
   const [isExporting,setIsExporting]=useState(false);
   const [projectTitle,setProjectTitle]=useState("");const [projectLogo,setProjectLogo]=useState(null);
+  const [titleFontSize,setTitleFontSize]=useState(28);const [titleLogoSize,setTitleLogoSize]=useState(48);const [titleGap,setTitleGap]=useState(8);
   const [showTitleModal,setShowTitleModal]=useState(false);const [tempTitle,setTempTitle]=useState("");const [tempLogo,setTempLogo]=useState(null);
+  const [tempFontSize,setTempFontSize]=useState(28);const [tempLogoSize,setTempLogoSize]=useState(48);const [tempGap,setTempGap]=useState(8);
+  const titleOrigRef=useRef(null);
   const svgRef=useRef(null);const fileInputRef=useRef(null);const editFileInputRef=useRef(null);const logoInputRef=useRef(null);const jsonInputRef=useRef(null);
   const [canvasSize]=useState({width:2000,height:1500});
 
   // JSON Export/Import (zero traffic - pure client-side)
-  const exportJson=()=>{const data={projectTitle,projectLogo,themeId,characters,relations,groups};const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`${projectTitle||"character-map"}-${new Date().toISOString().slice(0,10)}.json`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);};
-  const importJson=(file)=>{if(!file)return;const reader=new FileReader();reader.onload=e=>{try{const data=JSON.parse(e.target.result);if(data.characters)setCharacters(data.characters);if(data.relations)setRelations(data.relations);if(data.groups)setGroups(data.groups);if(data.projectTitle!==undefined)setProjectTitle(data.projectTitle);if(data.projectLogo!==undefined)setProjectLogo(data.projectLogo);if(data.themeId)setThemeId(data.themeId);setSelectedChar(null);}catch(err){alert("파일을 읽을 수 없습니다.");}};reader.readAsText(file);};
+  const exportJson=()=>{const data={projectTitle,projectLogo,titleFontSize,titleLogoSize,titleGap,themeId,characters,relations,groups};const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`${projectTitle||"character-map"}-${new Date().toISOString().slice(0,10)}.json`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);};
+  const importJson=(file)=>{if(!file)return;const reader=new FileReader();reader.onload=e=>{try{const data=JSON.parse(e.target.result);if(data.characters)setCharacters(data.characters);if(data.relations)setRelations(data.relations);if(data.groups)setGroups(data.groups);if(data.projectTitle!==undefined)setProjectTitle(data.projectTitle);if(data.projectLogo!==undefined)setProjectLogo(data.projectLogo);if(data.titleFontSize)setTitleFontSize(data.titleFontSize);if(data.titleLogoSize)setTitleLogoSize(data.titleLogoSize);if(data.titleGap!==undefined)setTitleGap(data.titleGap);if(data.themeId)setThemeId(data.themeId);setSelectedChar(null);}catch(err){alert("파일을 읽을 수 없습니다.");}};reader.readAsText(file);};
   const [newName,setNewName]=useState("");const [newDesc,setNewDesc]=useState("");const [newColor,setNewColor]=useState(COLORS[0]);const [newAvatar,setNewAvatar]=useState(null);const [newSize,setNewSize]=useState(2);
   const [editName,setEditName]=useState("");const [editDesc,setEditDesc]=useState("");const [editColor,setEditColor]=useState("");const [editAvatar,setEditAvatar]=useState(null);const [editSize,setEditSize]=useState(2);
   const [relType,setRelType]=useState("friend");const [relLabel,setRelLabel]=useState("");const [relCustomColor,setRelCustomColor]=useState(null);const [relLineStyle,setRelLineStyle]=useState("solid");
@@ -132,7 +135,7 @@ export default function CharacterMap() {
       let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
       characters.forEach(c=>{const s=SIZE_LEVELS[c.sizeLevel??2];minX=Math.min(minX,c.x-s.radius-40);minY=Math.min(minY,c.y-s.radius-20);maxX=Math.max(maxX,c.x+s.radius+40);maxY=Math.max(maxY,c.y+s.radius+50);});
       const pad=35;minX-=pad;minY-=pad;maxX+=pad;maxY+=pad;
-      const hasTitle=projectTitle||projectLogo;if(hasTitle)minY-=80;
+      const hasTitle=projectTitle||projectLogo;if(hasTitle){const titleH=Math.max(titleLogoSize*1.3,titleFontSize*1.3)+60;minY-=titleH;}
       const width=maxX-minX,height=maxY-minY,sc=2;
       const canvas=document.createElement("canvas");canvas.width=width*sc;canvas.height=height*sc;
       const ctx=canvas.getContext("2d");ctx.scale(sc,sc);ctx.translate(-minX,-minY);
@@ -140,9 +143,9 @@ export default function CharacterMap() {
       if(!isTransparent){ctx.fillStyle=T.grid;for(let gx=Math.floor(minX/40)*40;gx<maxX;gx+=40)for(let gy=Math.floor(minY/40)*40;gy<maxY;gy+=40){ctx.beginPath();ctx.arc(gx+20,gy+20,0.8,0,Math.PI*2);ctx.fill();}}
 
       // Title
-      if(hasTitle){const cx=(minX+maxX)/2,ty=minY+65;
-        if(projectLogo){await new Promise(resolve=>{const li=new Image();li.crossOrigin="anonymous";li.onload=()=>{const lh=96,lw=(li.naturalWidth/li.naturalHeight)*lh;ctx.save();ctx.font="900 36px 'Noto Sans KR',sans-serif";const tw=projectTitle?ctx.measureText(projectTitle).width:0;const totalW=lw+(projectTitle?8+tw:0);const sx=cx-totalW/2;ctx.drawImage(li,sx,ty-lh/2,lw,lh);if(projectTitle){ctx.fillStyle=T.labelTxt;ctx.textAlign="left";ctx.textBaseline="middle";ctx.fillText(projectTitle,sx+lw+8,ty);}ctx.restore();resolve();};li.onerror=()=>{if(projectTitle){ctx.save();ctx.fillStyle=T.labelTxt;ctx.font="900 36px 'Noto Sans KR',sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(projectTitle,cx,ty);ctx.restore();}resolve();};li.src=projectLogo;});}
-        else if(projectTitle){ctx.save();ctx.fillStyle=T.labelTxt;ctx.font="900 36px 'Noto Sans KR',sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(projectTitle,cx,ty);ctx.restore();}}
+      if(hasTitle){const titleH=Math.max(titleLogoSize*1.3,titleFontSize*1.3)+60;const cx=(minX+maxX)/2,ty=minY+titleH/2;
+        if(projectLogo){await new Promise(resolve=>{const li=new Image();li.crossOrigin="anonymous";li.onload=()=>{const lh=titleLogoSize*1.3,lw=(li.naturalWidth/li.naturalHeight)*lh;ctx.save();ctx.font=`900 ${titleFontSize*1.3}px 'Noto Sans KR',sans-serif`;const tw=projectTitle?ctx.measureText(projectTitle).width:0;const totalW=lw+(projectTitle?titleGap*2+tw:0);const sx=cx-totalW/2;ctx.drawImage(li,sx,ty-lh/2,lw,lh);if(projectTitle){ctx.fillStyle=T.labelTxt;ctx.textAlign="left";ctx.textBaseline="middle";ctx.fillText(projectTitle,sx+lw+titleGap*2,ty);}ctx.restore();resolve();};li.onerror=()=>{if(projectTitle){ctx.save();ctx.fillStyle=T.labelTxt;ctx.font=`900 ${titleFontSize*1.3}px 'Noto Sans KR',sans-serif`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(projectTitle,cx,ty);ctx.restore();}resolve();};li.src=projectLogo;});}
+        else if(projectTitle){ctx.save();ctx.fillStyle=T.labelTxt;ctx.font=`900 ${titleFontSize*1.3}px 'Noto Sans KR',sans-serif`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(projectTitle,cx,ty);ctx.restore();}}
 
       // Groups (convex hull)
       groups.forEach(g=>{const gh=getGroupHull(g);if(!gh||!gh.hull)return;
@@ -150,13 +153,13 @@ export default function CharacterMap() {
           for(let i=0;i<n;i++){const p0=h[(i-1+n)%n],p1=h[i],p2=h[(i+1)%n],p3=h[(i+2)%n];
             x.bezierCurveTo(p1.x+(p2.x-p0.x)*sm,p1.y+(p2.y-p0.y)*sm,p2.x-(p3.x-p1.x)*sm,p2.y-(p3.y-p1.y)*sm,p2.x,p2.y);}x.closePath();};
         ctx.save();ctx.globalAlpha=0.1;ctx.fillStyle=g.color;ctx.beginPath();drawHull(ctx);ctx.fill();ctx.restore();
-        ctx.save();ctx.globalAlpha=0.3;ctx.strokeStyle=g.color;ctx.lineWidth=2;ctx.setLineDash([8,5]);ctx.beginPath();drawHull(ctx);ctx.stroke();ctx.setLineDash([]);ctx.restore();
+        ctx.save();ctx.globalAlpha=0.18;ctx.strokeStyle=g.color;ctx.lineWidth=2;ctx.setLineDash([8,5]);ctx.beginPath();drawHull(ctx);ctx.stroke();ctx.setLineDash([]);ctx.restore();
         if(g.name){ctx.save();ctx.globalAlpha=0.75;ctx.fillStyle=g.color;ctx.font="700 12px 'Noto Sans KR',sans-serif";ctx.textAlign="left";ctx.textBaseline="top";ctx.fillText(g.name,gh.labelX,gh.labelY);ctx.restore();}});
       // For single-member groups (arc path, no hull array)
       groups.forEach(g=>{const gh=getGroupHull(g);if(!gh||gh.hull)return;
         const p=new Path2D(gh.path);
         ctx.save();ctx.globalAlpha=0.1;ctx.fillStyle=g.color;ctx.fill(p);ctx.restore();
-        ctx.save();ctx.globalAlpha=0.3;ctx.strokeStyle=g.color;ctx.lineWidth=2;ctx.setLineDash([8,5]);ctx.stroke(p);ctx.setLineDash([]);ctx.restore();
+        ctx.save();ctx.globalAlpha=0.18;ctx.strokeStyle=g.color;ctx.lineWidth=2;ctx.setLineDash([8,5]);ctx.stroke(p);ctx.setLineDash([]);ctx.restore();
         if(g.name){ctx.save();ctx.globalAlpha=0.75;ctx.fillStyle=g.color;ctx.font="700 12px 'Noto Sans KR',sans-serif";ctx.textAlign="left";ctx.textBaseline="top";ctx.fillText(g.name,gh.labelX,gh.labelY);ctx.restore();}});
 
       // Relations
@@ -184,7 +187,7 @@ export default function CharacterMap() {
       ctx.save();ctx.fillStyle=T.wm;ctx.font="500 12px 'Noto Sans KR',sans-serif";ctx.textAlign="right";ctx.fillText("인물관계도 메이커",maxX-16,maxY-16);ctx.restore();
       canvas.toBlob(blob=>{if(!blob){setIsExporting(false);return;}const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`${projectTitle||"character-map"}-${new Date().toISOString().slice(0,10)}.png`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);setIsExporting(false);},"image/png");
     }catch(e){console.error(e);setIsExporting(false);}
-  },[characters,relations,groups,T,projectTitle,projectLogo]);
+  },[characters,relations,groups,T,projectTitle,projectLogo,titleFontSize,titleLogoSize,titleGap]);
 
   const handleMouseDown=useCallback((e,cid)=>{e.stopPropagation();if(connectingFrom){if(connectingFrom!==cid)setShowRelModal({from:connectingFrom,to:cid});setConnectingFrom(null);return;}const ch=characters.find(c=>c.id===cid);const p=getSvgPoint(e.clientX,e.clientY);setDragOffset({x:p.x-ch.x,y:p.y-ch.y});setDragging(cid);setSelectedChar(cid);},[characters,connectingFrom,getSvgPoint]);
   const handleMouseMove=useCallback(e=>{if(dragging){const p=getSvgPoint(e.clientX,e.clientY);setCharacters(pr=>pr.map(c=>c.id===dragging?{...c,x:p.x-dragOffset.x,y:p.y-dragOffset.y}:c));}else if(isPanning)setPan({x:e.clientX-panStart.x,y:e.clientY-panStart.y});},[dragging,dragOffset,getSvgPoint,isPanning,panStart]);
@@ -275,13 +278,13 @@ export default function CharacterMap() {
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Playfair+Display:wght@700&display=swap" rel="stylesheet"/>
     <input ref={fileInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{handleImageUpload(e.target.files[0],setNewAvatar);e.target.value="";}}/>
     <input ref={editFileInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{handleImageUpload(e.target.files[0],setEditAvatar);e.target.value="";}}/>
-    <input ref={logoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{handleImageUpload(e.target.files[0],setTempLogo);e.target.value="";}}/>
+    <input ref={logoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{handleImageUpload(e.target.files[0],(v)=>{setTempLogo(v);setProjectLogo(v);});e.target.value="";}}/>
     <input ref={jsonInputRef} type="file" accept=".json" style={{display:"none"}} onChange={e=>{importJson(e.target.files[0]);e.target.value="";setShowFab(false);}}/>
 
     {/* Top center: big title */}
-    <div onClick={()=>{setTempTitle(projectTitle);setTempLogo(projectLogo);setShowTitleModal(true);}} style={{position:"absolute",top:"52px",left:"50%",transform:"translateX(-50%)",zIndex:100,cursor:"pointer",display:"flex",alignItems:"center",gap:"8px",padding:(projectTitle||projectLogo)?"10px 36px":"12px 28px",borderRadius:"20px",border:`1px dashed ${(projectTitle||projectLogo)?"transparent":T.btnSecBd}`,background:(projectTitle||projectLogo)?"transparent":T.btnSec,transition:"all 0.2s",maxWidth:"80vw"}} onMouseEnter={e=>{e.currentTarget.style.background=T.input;e.currentTarget.style.borderColor=T.btnSecBd;}} onMouseLeave={e=>{e.currentTarget.style.background=(projectTitle||projectLogo)?"transparent":T.btnSec;e.currentTarget.style.borderColor=(projectTitle||projectLogo)?"transparent":T.btnSecBd;}}>
-      {projectLogo&&<img src={projectLogo} alt="" style={{height:"74px",maxWidth:"230px",objectFit:"contain",borderRadius:"10px"}}/>}
-      {projectTitle?<span style={{fontSize:"28px",fontWeight:"900",color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",letterSpacing:"-0.8px",lineHeight:"1.1"}}>{projectTitle}</span>:!projectLogo?<span style={{fontSize:"14px",color:T.textMut}}>✏️ 관계도 이름을 설정하세요</span>:null}
+    <div onClick={()=>{titleOrigRef.current={t:projectTitle,l:projectLogo,fs:titleFontSize,ls:titleLogoSize,g:titleGap};setTempTitle(projectTitle);setTempLogo(projectLogo);setTempFontSize(titleFontSize);setTempLogoSize(titleLogoSize);setTempGap(titleGap);setShowTitleModal(true);}} style={{position:"absolute",top:"52px",left:"50%",transform:"translateX(-50%)",zIndex:100,cursor:"pointer",display:"flex",alignItems:"center",gap:`${titleGap}px`,padding:(projectTitle||projectLogo)?"10px 36px":"12px 28px",borderRadius:"20px",border:`1px dashed ${(projectTitle||projectLogo)?"transparent":T.btnSecBd}`,background:(projectTitle||projectLogo)?"transparent":T.btnSec,transition:"all 0.2s",maxWidth:"80vw"}} onMouseEnter={e=>{e.currentTarget.style.background=T.input;e.currentTarget.style.borderColor=T.btnSecBd;}} onMouseLeave={e=>{e.currentTarget.style.background=(projectTitle||projectLogo)?"transparent":T.btnSec;e.currentTarget.style.borderColor=(projectTitle||projectLogo)?"transparent":T.btnSecBd;}}>
+      {projectLogo&&<img src={projectLogo} alt="" style={{height:`${titleLogoSize}px`,maxWidth:"300px",objectFit:"contain",borderRadius:"10px"}}/>}
+      {projectTitle?<span style={{fontSize:`${titleFontSize}px`,fontWeight:"900",color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",letterSpacing:"-0.8px",lineHeight:"1.1"}}>{projectTitle}</span>:!projectLogo?<span style={{fontSize:"14px",color:T.textMut}}>✏️ 관계도 이름을 설정하세요</span>:null}
     </div>
 
     {/* Left top: branding + info */}
@@ -304,7 +307,7 @@ export default function CharacterMap() {
         {groups.map(g=>{const gh=getGroupHull(g);if(!gh)return null;return(
           <g key={g.id} onClick={e=>{e.stopPropagation();openEditGroup(g);}} style={{cursor:"pointer"}}>
             <path d={gh.path} fill={g.color} opacity="0.1" stroke="none"/>
-            <path d={gh.path} fill="none" stroke={g.color} strokeWidth="2" strokeDasharray="8,5" opacity="0.3"/>
+            <path d={gh.path} fill="none" stroke={g.color} strokeWidth="2" strokeDasharray="8,5" opacity="0.18"/>
             {g.name&&<text x={gh.labelX} y={gh.labelY} fill={g.color} fontSize="12" fontWeight="700" opacity="0.75">{g.name}</text>}
           </g>);})}
         {relations.map(rel=>{const fc=characters.find(c=>c.id===rel.from),tc=characters.find(c=>c.id===rel.to);if(!fc||!tc)return null;const color=getRelColor(rel),ls=rel.lineStyle||"solid",pathD=getRelPathD(rel,fc,tc),mid=getRelMid(rel,fc,tc),lb=(rel.type==="custom"&&!rel.label)?"":rel.label||(RELATIONSHIP_TYPES[rel.type]?.label||"기타"),pw=Math.max(50,lb.length*14+16);
@@ -356,13 +359,20 @@ export default function CharacterMap() {
 
 
     {/* Title Modal */}
-    {showTitleModal&&<div style={modalStyle} onClick={()=>setShowTitleModal(false)}><div style={cardStyle} onClick={e=>e.stopPropagation()}>
+    {showTitleModal&&<div style={modalStyle} onClick={()=>{const o=titleOrigRef.current;if(o){setProjectTitle(o.t);setProjectLogo(o.l);setTitleFontSize(o.fs);setTitleLogoSize(o.ls);setTitleGap(o.g);}setShowTitleModal(false);}}><div style={cardStyle} onClick={e=>e.stopPropagation()}>
       <h3 style={{margin:"0 0 24px",color:T.text,fontSize:"18px",fontWeight:"600"}}>📝 관계도 이름 설정</h3>
       <div style={{display:"flex",flexDirection:"column",gap:"16px"}}>
-        <div><label style={{fontSize:"12px",color:T.textSec,marginBottom:"6px",display:"block"}}>텍스트 입력</label><input value={tempTitle} onChange={e=>setTempTitle(e.target.value)} placeholder="관계도 이름을 입력하세요" style={inputStyle} onKeyDown={e=>{if(e.key==="Enter"){setProjectTitle(tempTitle.trim());setProjectLogo(tempLogo);setShowTitleModal(false);}}} autoFocus/></div>
-        <div><label style={{fontSize:"12px",color:T.textSec,marginBottom:"8px",display:"block"}}>로고 이미지 (선택)</label><div style={{display:"flex",alignItems:"center",gap:"16px"}}><div style={{width:80,height:50,borderRadius:"10px",background:tempLogo?"none":T.input,border:`2px dashed ${T.inputBd}`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>{tempLogo?<img src={tempLogo} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/>:<span style={{fontSize:"20px",opacity:0.4}}>🖼️</span>}</div><div style={{display:"flex",flexDirection:"column",gap:"6px"}}><button onClick={()=>logoInputRef.current?.click()} style={{...btnS,padding:"8px 16px",fontSize:"12px"}}>📁 {tempLogo?"변경":"업로드"}</button>{tempLogo&&<button onClick={()=>setTempLogo(null)} style={{...btnS,padding:"6px 16px",fontSize:"11px",color:"#FF6B6B",borderColor:"rgba(255,80,80,0.2)"}}>✕ 제거</button>}</div></div></div>
-        {(tempTitle||tempLogo)&&<div><label style={{fontSize:"12px",color:T.textSec,marginBottom:"8px",display:"block"}}>미리보기</label><div style={{padding:"12px 20px",borderRadius:"12px",background:T.input,display:"flex",alignItems:"center",justifyContent:"center",gap:"12px"}}>{tempLogo&&<img src={tempLogo} alt="" style={{height:"40px",maxWidth:"120px",objectFit:"contain",borderRadius:"6px"}}/>}{tempTitle.trim()&&<span style={{fontSize:"24px",fontWeight:"900",color:T.text}}>{tempTitle.trim()}</span>}</div></div>}
-        <div style={{display:"flex",gap:"8px",justifyContent:"flex-end",marginTop:"8px"}}>{(projectTitle||projectLogo)&&<button onClick={()=>{setProjectTitle("");setProjectLogo(null);setShowTitleModal(false);}} style={{...btnS,color:"#FF6B6B",borderColor:"rgba(255,80,80,0.3)",marginRight:"auto"}}>초기화</button>}<button onClick={()=>setShowTitleModal(false)} style={btnS}>취소</button><button onClick={()=>{setProjectTitle(tempTitle.trim());setProjectLogo(tempLogo);setShowTitleModal(false);}} style={btnP}>저장</button></div>
+        <div><label style={{fontSize:"12px",color:T.textSec,marginBottom:"6px",display:"block"}}>텍스트 입력</label><input value={tempTitle} onChange={e=>{setTempTitle(e.target.value);setProjectTitle(e.target.value.trim());}} placeholder="관계도 이름을 입력하세요" style={inputStyle} onKeyDown={e=>{if(e.key==="Enter"){setProjectTitle(tempTitle.trim());setProjectLogo(tempLogo);setTitleFontSize(tempFontSize);setTitleLogoSize(tempLogoSize);setTitleGap(tempGap);setShowTitleModal(false);}}} autoFocus/></div>
+        <div><label style={{fontSize:"12px",color:T.textSec,marginBottom:"8px",display:"block"}}>로고 이미지 (선택)</label><div style={{display:"flex",alignItems:"center",gap:"16px"}}><div style={{width:80,height:50,borderRadius:"10px",background:tempLogo?"none":T.input,border:`2px dashed ${T.inputBd}`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>{tempLogo?<img src={tempLogo} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/>:<span style={{fontSize:"20px",opacity:0.4}}>🖼️</span>}</div><div style={{display:"flex",flexDirection:"column",gap:"6px"}}><button onClick={()=>logoInputRef.current?.click()} style={{...btnS,padding:"8px 16px",fontSize:"12px"}}>📁 {tempLogo?"변경":"업로드"}</button>{tempLogo&&<button onClick={()=>{setTempLogo(null);setProjectLogo(null);}} style={{...btnS,padding:"6px 16px",fontSize:"11px",color:"#FF6B6B",borderColor:"rgba(255,80,80,0.2)"}}>✕ 제거</button>}</div></div></div>
+        {(tempTitle||tempLogo)&&<>
+          <div style={{display:"flex",gap:"12px",flexWrap:"wrap"}}>
+            {tempTitle&&<div style={{flex:1,minWidth:"120px"}}><label style={{fontSize:"11px",color:T.textSec,marginBottom:"4px",display:"block"}}>텍스트 크기 ({tempFontSize}px)</label><input type="range" min="14" max="60" value={tempFontSize} onChange={e=>{setTempFontSize(+e.target.value);setTitleFontSize(+e.target.value);}} style={{width:"100%",accentColor:"#6366F1"}}/></div>}
+            {tempLogo&&<div style={{flex:1,minWidth:"120px"}}><label style={{fontSize:"11px",color:T.textSec,marginBottom:"4px",display:"block"}}>이미지 크기 ({tempLogoSize}px)</label><input type="range" min="20" max="120" value={tempLogoSize} onChange={e=>{setTempLogoSize(+e.target.value);setTitleLogoSize(+e.target.value);}} style={{width:"100%",accentColor:"#6366F1"}}/></div>}
+            {tempTitle&&tempLogo&&<div style={{flex:1,minWidth:"120px"}}><label style={{fontSize:"11px",color:T.textSec,marginBottom:"4px",display:"block"}}>텍스트-이미지 간격 ({tempGap}px)</label><input type="range" min="0" max="40" value={tempGap} onChange={e=>{setTempGap(+e.target.value);setTitleGap(+e.target.value);}} style={{width:"100%",accentColor:"#6366F1"}}/></div>}
+          </div>
+
+        </>}
+        <div style={{display:"flex",gap:"8px",justifyContent:"flex-end",marginTop:"8px"}}>{(projectTitle||projectLogo)&&<button onClick={()=>{setProjectTitle("");setProjectLogo(null);setTitleFontSize(28);setTitleLogoSize(48);setTitleGap(8);setShowTitleModal(false);}} style={{...btnS,color:"#FF6B6B",borderColor:"rgba(255,80,80,0.3)",marginRight:"auto"}}>초기화</button>}<button onClick={()=>{const o=titleOrigRef.current;if(o){setProjectTitle(o.t);setProjectLogo(o.l);setTitleFontSize(o.fs);setTitleLogoSize(o.ls);setTitleGap(o.g);}setShowTitleModal(false);}} style={btnS}>취소</button><button onClick={()=>setShowTitleModal(false)} style={btnP}>저장</button></div>
       </div>
     </div></div>}
 
