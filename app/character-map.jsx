@@ -78,13 +78,50 @@ export default function CharacterMap() {
     return{tipX,tipY,p1x:baseX+px*6,p1y:baseY+py*6,p2x:baseX-px*6,p2y:baseY-py*6};
   };
 
-  // Group helpers - rounded rect around members with padding
-  const getGroupBounds=(g)=>{
+  // Group helpers - smooth padded hull around members
+  const getGroupHull=(g)=>{
     const pts=g.members.map(mid=>characters.find(c=>c.id===mid)).filter(Boolean);
     if(pts.length===0)return null;
-    let x1=Infinity,y1=Infinity,x2=-Infinity,y2=-Infinity;
-    pts.forEach(c=>{const s=SIZE_LEVELS[c.sizeLevel??2];x1=Math.min(x1,c.x-s.radius);y1=Math.min(y1,c.y-s.radius);x2=Math.max(x2,c.x+s.radius);y2=Math.max(y2,c.y+s.radius);});
-    const pad=28;return{x:x1-pad,y:y1-pad-(g.name?22:0),w:x2-x1+pad*2,h:y2-y1+pad*2+(g.name?22:0),labelY:y1-pad-(g.name?20:0)};
+    const pad=30;
+    // 1 member: circle
+    if(pts.length===1){const c=pts[0],s=SIZE_LEVELS[c.sizeLevel??2],r=s.radius+pad;
+      return{path:`M ${c.x} ${c.y-r} A ${r} ${r} 0 1 1 ${c.x-0.01} ${c.y-r} Z`,
+        labelX:c.x-r+10,labelY:c.y-r-16};}
+    // Sample boundary points around each member
+    const boundary=[];
+    pts.forEach(c=>{const s=SIZE_LEVELS[c.sizeLevel??2];const r=s.radius+pad;
+      for(let i=0;i<32;i++){const a=i/32*Math.PI*2;boundary.push({x:c.x+Math.cos(a)*r,y:c.y+Math.sin(a)*r});}});
+    // Graham scan
+    const anchor=boundary.reduce((a,b)=>b.y<a.y||(b.y===a.y&&b.x<a.x)?b:a);
+    const sorted=[...boundary].filter(p=>p!==anchor).sort((a,b)=>{
+      const da=Math.atan2(a.y-anchor.y,a.x-anchor.x),db=Math.atan2(b.y-anchor.y,b.x-anchor.x);
+      return da-db||Math.hypot(a.x-anchor.x,a.y-anchor.y)-Math.hypot(b.x-anchor.x,b.y-anchor.y);});
+    const hull=[anchor];
+    for(const p of sorted){
+      while(hull.length>1){const a=hull[hull.length-2],b=hull[hull.length-1];
+        if((b.x-a.x)*(p.y-a.y)-(b.y-a.y)*(p.x-a.x)<=0)hull.pop();else break;}
+      hull.push(p);}
+    if(hull.length<3)return null;
+    // Resample hull to ~36 evenly spaced points for uniform smoothness
+    let totalLen=0;const segs=[];
+    for(let i=0;i<hull.length;i++){const a=hull[i],b=hull[(i+1)%hull.length];const dx=b.x-a.x,dy=b.y-a.y;const l=Math.sqrt(dx*dx+dy*dy);segs.push(l);totalLen+=l;}
+    const targetPts=36;const step=totalLen/targetPts;const resampled=[];
+    let segIdx=0,segOff=0;
+    for(let i=0;i<targetPts;i++){
+      const dist=i*step;let d=dist,si=0;
+      for(si=0;si<segs.length;si++){if(d<=segs[si])break;d-=segs[si];}
+      if(si>=segs.length)si=segs.length-1;
+      const t=segs[si]>0?d/segs[si]:0;const a=hull[si],b=hull[(si+1)%hull.length];
+      resampled.push({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});}
+    // Cubic bezier through resampled points
+    const n=resampled.length;const sm=0.18;
+    let pathD=`M ${resampled[0].x} ${resampled[0].y}`;
+    for(let i=0;i<n;i++){
+      const p0=resampled[(i-1+n)%n],p1=resampled[i],p2=resampled[(i+1)%n],p3=resampled[(i+2)%n];
+      pathD+=` C ${p1.x+(p2.x-p0.x)*sm} ${p1.y+(p2.y-p0.y)*sm} ${p2.x-(p3.x-p1.x)*sm} ${p2.y-(p3.y-p1.y)*sm} ${p2.x} ${p2.y}`;}
+    pathD+=" Z";
+    let minX=Infinity,minY=Infinity;resampled.forEach(p=>{minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);});
+    return{path:pathD,hull:resampled,labelX:minX+10,labelY:minY-16};
   };
   const openEditGroup=(g)=>{setGroupName(g.name);setGroupColor(g.color);setGroupMembers([...g.members]);setShowGroupModal(g.id);};
 
@@ -107,11 +144,20 @@ export default function CharacterMap() {
         if(projectLogo){await new Promise(resolve=>{const li=new Image();li.crossOrigin="anonymous";li.onload=()=>{const lh=96,lw=(li.naturalWidth/li.naturalHeight)*lh;ctx.save();ctx.font="900 36px 'Noto Sans KR',sans-serif";const tw=projectTitle?ctx.measureText(projectTitle).width:0;const totalW=lw+(projectTitle?8+tw:0);const sx=cx-totalW/2;ctx.drawImage(li,sx,ty-lh/2,lw,lh);if(projectTitle){ctx.fillStyle=T.labelTxt;ctx.textAlign="left";ctx.textBaseline="middle";ctx.fillText(projectTitle,sx+lw+8,ty);}ctx.restore();resolve();};li.onerror=()=>{if(projectTitle){ctx.save();ctx.fillStyle=T.labelTxt;ctx.font="900 36px 'Noto Sans KR',sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(projectTitle,cx,ty);ctx.restore();}resolve();};li.src=projectLogo;});}
         else if(projectTitle){ctx.save();ctx.fillStyle=T.labelTxt;ctx.font="900 36px 'Noto Sans KR',sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(projectTitle,cx,ty);ctx.restore();}}
 
-      // Groups (dashed rounded rect)
-      groups.forEach(g=>{const gb=getGroupBounds(g);if(!gb)return;
-        ctx.save();ctx.globalAlpha=0.12;ctx.fillStyle=g.color;ctx.beginPath();ctx.roundRect(gb.x,gb.y,gb.w,gb.h,20);ctx.fill();ctx.restore();
-        ctx.save();ctx.globalAlpha=0.35;ctx.strokeStyle=g.color;ctx.lineWidth=2;ctx.setLineDash([8,5]);ctx.beginPath();ctx.roundRect(gb.x,gb.y,gb.w,gb.h,20);ctx.stroke();ctx.setLineDash([]);ctx.restore();
-        if(g.name){ctx.save();ctx.globalAlpha=0.8;ctx.fillStyle=g.color;ctx.font="700 12px 'Noto Sans KR',sans-serif";ctx.textAlign="left";ctx.textBaseline="top";ctx.fillText(g.name,gb.x+14,gb.labelY+4);ctx.restore();}});
+      // Groups (convex hull)
+      groups.forEach(g=>{const gh=getGroupHull(g);if(!gh||!gh.hull)return;
+        const drawHull=(x)=>{const h=gh.hull,n=h.length,sm=0.25;x.moveTo(h[0].x,h[0].y);
+          for(let i=0;i<n;i++){const p0=h[(i-1+n)%n],p1=h[i],p2=h[(i+1)%n],p3=h[(i+2)%n];
+            x.bezierCurveTo(p1.x+(p2.x-p0.x)*sm,p1.y+(p2.y-p0.y)*sm,p2.x-(p3.x-p1.x)*sm,p2.y-(p3.y-p1.y)*sm,p2.x,p2.y);}x.closePath();};
+        ctx.save();ctx.globalAlpha=0.1;ctx.fillStyle=g.color;ctx.beginPath();drawHull(ctx);ctx.fill();ctx.restore();
+        ctx.save();ctx.globalAlpha=0.3;ctx.strokeStyle=g.color;ctx.lineWidth=2;ctx.setLineDash([8,5]);ctx.beginPath();drawHull(ctx);ctx.stroke();ctx.setLineDash([]);ctx.restore();
+        if(g.name){ctx.save();ctx.globalAlpha=0.75;ctx.fillStyle=g.color;ctx.font="700 12px 'Noto Sans KR',sans-serif";ctx.textAlign="left";ctx.textBaseline="top";ctx.fillText(g.name,gh.labelX,gh.labelY);ctx.restore();}});
+      // For single-member groups (arc path, no hull array)
+      groups.forEach(g=>{const gh=getGroupHull(g);if(!gh||gh.hull)return;
+        const p=new Path2D(gh.path);
+        ctx.save();ctx.globalAlpha=0.1;ctx.fillStyle=g.color;ctx.fill(p);ctx.restore();
+        ctx.save();ctx.globalAlpha=0.3;ctx.strokeStyle=g.color;ctx.lineWidth=2;ctx.setLineDash([8,5]);ctx.stroke(p);ctx.setLineDash([]);ctx.restore();
+        if(g.name){ctx.save();ctx.globalAlpha=0.75;ctx.fillStyle=g.color;ctx.font="700 12px 'Noto Sans KR',sans-serif";ctx.textAlign="left";ctx.textBaseline="top";ctx.fillText(g.name,gh.labelX,gh.labelY);ctx.restore();}});
 
       // Relations
       relations.forEach(rel=>{const fc=characters.find(c=>c.id===rel.from),tc=characters.find(c=>c.id===rel.to);if(!fc||!tc)return;const color=getRelColor(rel),ls=rel.lineStyle||"solid";
@@ -255,11 +301,11 @@ export default function CharacterMap() {
       </defs>
       <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
         <rect width={canvasSize.width} height={canvasSize.height} fill="url(#grid)"/>
-        {groups.map(g=>{const gb=getGroupBounds(g);if(!gb)return null;return(
+        {groups.map(g=>{const gh=getGroupHull(g);if(!gh)return null;return(
           <g key={g.id} onClick={e=>{e.stopPropagation();openEditGroup(g);}} style={{cursor:"pointer"}}>
-            <rect x={gb.x} y={gb.y} width={gb.w} height={gb.h} rx="20" fill={g.color} opacity="0.12"/>
-            <rect x={gb.x} y={gb.y} width={gb.w} height={gb.h} rx="20" fill="none" stroke={g.color} strokeWidth="2" strokeDasharray="8,5" opacity="0.35"/>
-            {g.name&&<text x={gb.x+14} y={gb.labelY+15} fill={g.color} fontSize="12" fontWeight="700" opacity="0.8">{g.name}</text>}
+            <path d={gh.path} fill={g.color} opacity="0.1" stroke="none"/>
+            <path d={gh.path} fill="none" stroke={g.color} strokeWidth="2" strokeDasharray="8,5" opacity="0.3"/>
+            {g.name&&<text x={gh.labelX} y={gh.labelY} fill={g.color} fontSize="12" fontWeight="700" opacity="0.75">{g.name}</text>}
           </g>);})}
         {relations.map(rel=>{const fc=characters.find(c=>c.id===rel.from),tc=characters.find(c=>c.id===rel.to);if(!fc||!tc)return null;const color=getRelColor(rel),ls=rel.lineStyle||"solid",pathD=getRelPathD(rel,fc,tc),mid=getRelMid(rel,fc,tc),lb=(rel.type==="custom"&&!rel.label)?"":rel.label||(RELATIONSHIP_TYPES[rel.type]?.label||"기타"),pw=Math.max(50,lb.length*14+16);
           let arrow=null,arrow2=null;if(ls==="arrowToFirst"||ls==="arrowToSecond"||ls==="arrowBoth"){arrow=getArrowPoints(fc,tc,ls==="arrowToSecond"||ls==="arrowBoth");if(ls==="arrowBoth")arrow2=getArrowPoints(fc,tc,false);if(ls==="arrowToFirst")arrow=getArrowPoints(fc,tc,false);}
